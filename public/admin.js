@@ -1,7 +1,7 @@
 (() => {
   'use strict';
   const $ = id => document.getElementById(id);
-  const state = { token: '', actor: null, cases: [], filter: 'ALL', selected: null, busy: false, page: 1, total: 0, pageSize: 25, counts: {}, editingUser: null };
+  const state = { token: '', actor: null, cases: [], filter: 'ALL', selected: null, selectedIds: new Set(), busy: false, page: 1, total: 0, pageSize: 25, counts: {}, editingUser: null };
   let csrf = '', generation = 0, refreshSequence = 0, openwebuiUrl = '', live = null;
   const labels = { PENDING: '待審核', APPROVED: '待匯入', REJECTED: '已退回', IMPORTED: '已匯入', ARCHIVED: '已封存' };
   const actions = { SUBMIT: '提交資料', APPROVE: '通過審核', REJECT: '退回補正', IMPORT: '完成知識庫匯入' };
@@ -26,12 +26,13 @@
     if (name === 'updateCase') { const { id, ...body } = args[1]; return request('/api/cases/' + encodeURIComponent(id) + '/decision', 'POST', body); }
     if (name === 'archiveCase') return request('/api/cases/' + encodeURIComponent(args[1]) + '/archive', 'POST', {});
     if (name === 'deleteCase') return request('/api/cases/' + encodeURIComponent(args[1]) + '/delete', 'POST', {});
+    if (name === 'batchCaseAction') return request('/api/cases/batch-action', 'POST', { action: args[1], ids: args[2] });
     throw new Error('不支援的操作。');
   }
   function message(id, error) { $(id).textContent = error ? (error.message || String(error)).replace(/^Exception: /, '') : ''; }
   function resetSession(text) {
     if (live) { live.close(); live = null; }
-    state.token = ''; state.actor = null; state.cases = []; state.selected = null; state.filter = 'ALL'; state.page = 1;
+    state.token = ''; state.actor = null; state.cases = []; state.selected = null; state.selectedIds.clear(); state.filter = 'ALL'; state.page = 1;
     $('workspace').hidden = true; $('login').hidden = false; $('case-rows').replaceChildren(); $('user-rows').replaceChildren();
     $('user-form').reset(); $('detail').close(); $('detail-fields').replaceChildren(); $('history').replaceChildren(); $('search').value = '';
     $('detail-title').textContent = ''; $('detail-id').textContent = ''; $('detail-badge').replaceChildren(); $('folder-link').removeAttribute('href');
@@ -92,6 +93,7 @@
       const result = await rpc('getDashboard', token);
       if (state.token !== token || sequence !== refreshSequence) return;
       state.actor = result.actor; state.cases = result.cases;
+      const visibleIds = new Set(state.cases.map(item => item.id)); state.selectedIds = new Set([...state.selectedIds].filter(id => visibleIds.has(id)));
       state.counts = result.counts; state.total = result.total; state.page = result.page; state.pageSize = result.pageSize;
       renderCases(); message('global-status', '');
     } finally { $('refresh').disabled = false; }
@@ -110,7 +112,8 @@
     $('count-pending').textContent = String(state.counts.pending || 0).padStart(2, '0');
     $('count-approved').textContent = String(state.counts.approved || 0).padStart(2, '0');
     $('count-imported').textContent = String(state.counts.imported || 0).padStart(2, '0');
-    const items = state.cases;
+    const items = state.cases, canManage = state.actor?.role === 'ADMIN';
+    $('select-all').closest('th').hidden = !canManage;
     const body = $('case-rows'); body.replaceChildren();
     items.forEach(item => {
       const tr = element('tr'), submitter = element('td');
@@ -118,7 +121,10 @@
       const stateCell = element('td'); stateCell.append(badge(item));
       const action = element('td'), button = element('button', '檢視 ↗', 'secondary');
       button.setAttribute('aria-label', '檢視 ' + item.name + ' 的案件'); button.addEventListener('click', async () => { button.disabled = true; try { await openDetail(item.id); } catch (error) { message('global-status', error); } finally { button.disabled = false; } }); action.append(button);
-      tr.append(submitter, element('td', item.identity), element('td', date(item.submittedAt)), stateCell, action); body.append(tr);
+      const selectCell = element('td', null, 'select-col');
+      if (canManage) { const label = element('label', null, 'case-select'), checkbox = document.createElement('input'); checkbox.type = 'checkbox'; checkbox.checked = state.selectedIds.has(item.id); checkbox.setAttribute('aria-label', '選取 ' + item.name); checkbox.addEventListener('change', () => { if (checkbox.checked) state.selectedIds.add(item.id); else state.selectedIds.delete(item.id); updateSelectionUI(); }); label.append(checkbox); selectCell.append(label); }
+      selectCell.hidden = !canManage;
+      tr.append(selectCell, submitter, element('td', item.identity), element('td', date(item.submittedAt)), stateCell, action); body.append(tr);
     });
     $('empty').hidden = items.length > 0;
     $('empty').querySelector('h3').textContent = state.counts.total ? '沒有符合條件的案件' : '目前沒有案件';
@@ -127,13 +133,35 @@
     const pages = Math.max(1, Math.ceil(state.total / state.pageSize));
     $('page-label').textContent = state.page + ' / ' + pages; $('previous-page').disabled = state.page <= 1; $('next-page').disabled = state.page >= pages;
     document.querySelectorAll('[data-filter]').forEach(button => { button.classList.toggle('selected', button.dataset.filter === state.filter); button.setAttribute('aria-pressed', String(button.dataset.filter === state.filter)); });
+    updateSelectionUI();
+  }
+  function updateSelectionUI() {
+    const canManage = state.actor?.role === 'ADMIN', selected = state.cases.filter(item => state.selectedIds.has(item.id));
+    $('bulk-actions').hidden = !canManage || state.selectedIds.size === 0;
+    $('selection-count').textContent = '已選取 ' + state.selectedIds.size + ' 筆';
+    $('select-all').checked = canManage && state.cases.length > 0 && selected.length === state.cases.length;
+    $('select-all').indeterminate = canManage && selected.length > 0 && selected.length < state.cases.length;
+  }
+  async function batchAction(action) {
+    if (state.busy || state.actor?.role !== 'ADMIN' || state.selectedIds.size === 0) return;
+    const ids = [...state.selectedIds];
+    const prompt = action === 'ARCHIVE' ? '確定要封存選取的 ' + ids.length + ' 筆案件嗎？' : '確定要刪除選取的 ' + ids.length + ' 筆案件嗎？此操作會保留稽核紀錄。';
+    if (!window.confirm(prompt)) return;
+    state.busy = true; $('bulk-archive').disabled = true; $('bulk-delete').disabled = true; message('global-status', '處理中…');
+    try { const result = await rpc('batchCaseAction', state.token, action, ids); state.selectedIds.clear(); await refresh(); message('global-status', (action === 'ARCHIVE' ? '已封存 ' : '已刪除 ') + result.count + ' 筆案件。'); }
+    catch (error) { message('global-status', error); }
+    finally { state.busy = false; $('bulk-archive').disabled = false; $('bulk-delete').disabled = false; }
   }
   const load = () => refresh().catch(error => message('global-status', error));
-  document.querySelectorAll('[data-filter]').forEach(button => button.addEventListener('click', () => { state.filter = button.dataset.filter; state.page = 1; load(); }));
+  document.querySelectorAll('[data-filter]').forEach(button => button.addEventListener('click', () => { state.filter = button.dataset.filter; state.page = 1; state.selectedIds.clear(); load(); }));
+  $('select-all').addEventListener('change', () => { if ($('select-all').checked) state.cases.forEach(item => state.selectedIds.add(item.id)); else state.cases.forEach(item => state.selectedIds.delete(item.id)); renderCases(); });
+  $('clear-selection').addEventListener('click', () => { state.selectedIds.clear(); renderCases(); });
+  $('bulk-archive').addEventListener('click', () => batchAction('ARCHIVE'));
+  $('bulk-delete').addEventListener('click', () => batchAction('DELETE'));
   let searchTimer;
-  $('search').addEventListener('input', () => { clearTimeout(searchTimer); searchTimer = setTimeout(() => { state.page = 1; load(); }, 250); });
-  $('previous-page').addEventListener('click', () => { state.page--; load(); });
-  $('next-page').addEventListener('click', () => { state.page++; load(); });
+  $('search').addEventListener('input', () => { clearTimeout(searchTimer); searchTimer = setTimeout(() => { state.page = 1; state.selectedIds.clear(); load(); }, 250); });
+  $('previous-page').addEventListener('click', () => { state.page--; state.selectedIds.clear(); load(); });
+  $('next-page').addEventListener('click', () => { state.page++; state.selectedIds.clear(); load(); });
   function showView(view) {
     if (view === 'users' && state.actor.role !== 'ADMIN') return;
     $('cases-view').hidden = view !== 'cases'; $('users-view').hidden = view !== 'users';

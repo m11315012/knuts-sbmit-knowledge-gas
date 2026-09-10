@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { ZodError } from 'zod';
 import { pool, transaction } from './db.js';
 import { hashPassword, verifyPassword } from './password.js';
-import { loginSchema, submissionSchema, decisionSchema, userSchema, querySchema, uuid, problem } from './validation.js';
+import { loginSchema, submissionSchema, decisionSchema, userSchema, querySchema, batchCaseSchema, uuid, problem } from './validation.js';
 
 const publicUser = row => ({ id: row.id, account: row.username, name: row.name, role: row.role, enabled: row.enabled, version: row.version });
 const item = row => ({ id: row.id, name: row.name, email: row.email, identity: row.identity, folderUrl: row.folder_url, notes: row.notes,
@@ -155,6 +155,24 @@ export async function createApp() {
       await db.query('INSERT INTO audit_events(id,submission_id,user_id,actor,action,note) VALUES ($1,$2,$3,$4,$5,$6)', [randomUUID(), id, actor.id, actor.username, input.action, input.note]);
     });
     announce(); res.json({ ok: true });
+  });
+  app.post('/api/cases/batch-action', authenticated, administrator, async (req, res) => {
+    const input = batchCaseSchema.parse(req.body);
+    await transaction(async db => {
+      for (const id of input.ids) {
+        const row = (await db.query('SELECT * FROM submissions WHERE id=$1 FOR UPDATE', [id])).rows[0];
+        if (!row || row.deleted_at) throw problem(404, '找不到其中一筆案件。');
+        if (input.action === 'ARCHIVE') {
+          if (row.archived_at) throw problem(409, '選取的案件包含已封存案件。');
+          await db.query('UPDATE submissions SET archived_at=now(),archived_by=$2,version=version+1 WHERE id=$1', [id, req.actor.username]);
+          await db.query("INSERT INTO audit_events(id,submission_id,user_id,actor,action) VALUES ($1,$2,$3,$4,'ARCHIVE')", [randomUUID(), id, req.actor.id, req.actor.username]);
+        } else {
+          await db.query('UPDATE submissions SET deleted_at=now(),deleted_by=$2,version=version+1 WHERE id=$1', [id, req.actor.username]);
+          await db.query("INSERT INTO audit_events(id,submission_id,user_id,actor,action,note) VALUES ($1,$2,$3,$4,'DELETE','批次刪除')", [randomUUID(), id, req.actor.id, req.actor.username]);
+        }
+      }
+    });
+    announce(); res.json({ ok: true, count: input.ids.length });
   });
   app.post('/api/cases/:id/archive', authenticated, administrator, async (req, res) => {
     const id = uuid.parse(req.params.id);

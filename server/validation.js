@@ -12,4 +12,5 @@ export const decisionSchema = z.object({ version: z.number().int().positive(), a
 export const userSchema = z.object({ account, name: z.string().trim().min(1).max(100), role: z.enum(['ADMIN','STAFF']), enabled: z.boolean(), password: z.union([password,z.literal('')]), version: z.number().int().positive().optional() }).strict();
 export const querySchema = z.object({ page: z.coerce.number().int().min(1).max(100000).default(1), filter: z.enum(['ALL','PENDING','APPROVED','REJECTED','IMPORTED','ARCHIVED']).default('ALL'), search: z.string().trim().max(200).default('') });
 export const uuid = z.uuid();
+export const batchCaseSchema = z.object({ action: z.enum(['ARCHIVE', 'DELETE']), ids: z.array(uuid).min(1).max(100) }).strict().refine(data => new Set(data.ids).size === data.ids.length, { message: '案件不可重複。' });
 export function problem(status, message) { return Object.assign(new Error(message), { status }); }

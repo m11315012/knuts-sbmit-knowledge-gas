@@ -4,8 +4,10 @@
   
   <meta charset="utf-8">
   <meta name="color-scheme" content="dark light">
+  <link rel="icon" type="image/jpeg" href="/assets/site-icon.jpg">
+  <link rel="apple-touch-icon" href="/assets/site-icon.jpg">
   <link rel="stylesheet" href="/assets/styles.css">
-  <style>.brand-title{display:block;line-height:1.15}.brand-title .brand-sub{letter-spacing:.04em}@media(max-width:740px){.brand{gap:8px}.brand-title{font-size:1rem}.brand-title .brand-sub{font-size:.5rem;letter-spacing:0}.top-actions{gap:8px}.header-link{font-size:.75rem}}</style>
+  <style>.brand-title{display:block;line-height:1.15}.brand-title .brand-sub{letter-spacing:.04em}.bulk-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap;border:1px solid var(--line);background:var(--panel);padding:12px 16px;margin:-6px 0 20px}.bulk-actions span{margin-right:auto;font-size:.875rem;color:var(--muted)}.bulk-actions .text-button{padding:8px 4px}.select-col{width:44px;padding-left:12px!important;padding-right:4px!important}.select-all-label,.case-select{display:flex;align-items:center;justify-content:center;min-height:24px}.select-all-label input,.case-select input{width:17px;height:17px;accent-color:var(--ink)}@media(max-width:740px){.brand{gap:8px}.brand-title{font-size:1rem}.brand-title .brand-sub{font-size:.5rem;letter-spacing:0}.top-actions{gap:8px}.header-link{font-size:.75rem}.bulk-actions{align-items:stretch}.bulk-actions span{width:100%}.bulk-actions button{flex:1}}</style>
 </head>
 <body>
   <header class="topbar">
@@ -48,7 +50,8 @@
         <div class="page-heading"><div><div class="eyebrow" id="workspace-kicker">REVIEW CONSOLE / 01</div><h1 id="workspace-title">提交案件<span class="heading-dot">.</span></h1><p id="role-description">檢視資料，完成審核與入庫交接。</p></div><div class="heading-actions"><span id="live-indicator" class="live-indicator"><i></i> 即時同步</span><button id="refresh" class="secondary">↻ 重新整理</button></div></div>
         <div class="metrics"><div><span>可檢視案件</span><strong id="count-all">00</strong><small>TOTAL RECORDS</small></div><div><span>待審核</span><strong id="count-pending">00</strong><small>AWAITING REVIEW</small></div><div><span>待匯入</span><strong id="count-approved">00</strong><small>READY TO IMPORT</small></div><div><span>已匯入</span><strong id="count-imported">00</strong><small>COMPLETED</small></div></div>
         <div class="list-toolbar"><div class="filters" role="group" aria-label="案件狀態"><button data-filter="ALL" class="selected">全部</button><button data-filter="PENDING">待審核</button><button data-filter="APPROVED">待匯入</button><button data-filter="IMPORTED">已匯入</button><button data-filter="REJECTED">已退回</button><button data-filter="ARCHIVED">已封存</button></div><label class="search"><span aria-hidden="true">⌕</span><input id="search" type="search" placeholder="搜尋姓名、Email 或案件編號" aria-label="搜尋案件"></label></div>
-        <div class="table-wrapper"><table><thead><tr><th>案件 / 提交者</th><th>身分</th><th>提交時間</th><th>處理狀態</th><th><span class="sr-only">操作</span></th></tr></thead><tbody id="case-rows"></tbody></table><div id="empty" class="empty" hidden><span aria-hidden="true">▤</span><h3>目前沒有案件</h3><p>新的表單資料送達後，會顯示在這裡。</p></div></div>
+        <div id="bulk-actions" class="bulk-actions" hidden><span id="selection-count">已選取 0 筆</span><button id="bulk-archive" class="secondary">封存選取案件</button><button id="bulk-delete" class="danger">刪除選取案件</button><button id="clear-selection" class="text-button">清除選取</button></div>
+        <div class="table-wrapper"><table><thead><tr><th class="select-col"><label class="select-all-label"><input id="select-all" type="checkbox" aria-label="選取本頁全部案件"></label></th><th>案件 / 提交者</th><th>身分</th><th>提交時間</th><th>處理狀態</th><th><span class="sr-only">操作</span></th></tr></thead><tbody id="case-rows"></tbody></table><div id="empty" class="empty" hidden><span aria-hidden="true">▤</span><h3>目前沒有案件</h3><p>新的表單資料送達後，會顯示在這裡。</p></div></div>
         <div class="list-footer"><span id="result-count"></span><span>FORM → REVIEW → KNOWLEDGE</span></div><div class="pager"><button id="previous-page" class="secondary">← 上一頁</button><span id="page-label">1 / 1</span><button id="next-page" class="secondary">下一頁 →</button></div>
       </section>
       <section id="users-view" hidden>
