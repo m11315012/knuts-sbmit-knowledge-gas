@@ -13,7 +13,8 @@ import { loginSchema, submissionSchema, decisionSchema, userSchema, querySchema,
 const publicUser = row => ({ id: row.id, account: row.username, name: row.name, role: row.role, enabled: row.enabled, version: row.version });
 const item = row => ({ id: row.id, name: row.name, email: row.email, identity: row.identity, folderUrl: row.folder_url, notes: row.notes,
   status: row.status, importStatus: row.import_status, submittedAt: row.submitted_at, reviewedBy: row.reviewed_by, reviewedAt: row.reviewed_at,
-  reviewNote: row.review_note, importedBy: row.imported_by, importedAt: row.imported_at, version: row.version });
+  reviewNote: row.review_note, importedBy: row.imported_by, importedAt: row.imported_at, archivedAt: row.archived_at, archivedBy: row.archived_by,
+  deletedAt: row.deleted_at, deletedBy: row.deleted_by, version: row.version });
 const saveSession = req => new Promise((resolve, reject) => req.session.save(error => error ? reject(error) : resolve()));
 const rate = (windowMs, limit, message) => rateLimit({ windowMs, limit, standardHeaders: 'draft-8', legacyHeaders: false, message: { error: message } });
 const liveClients = new Set();
@@ -110,7 +111,9 @@ export async function createApp() {
     if (!result.duplicate) announce();
   });
   app.get('/api/cases', authenticated, async (req, res) => {
-    const query = querySchema.parse(req.query), parameters = [], conditions = [];
+    const query = querySchema.parse(req.query), parameters = [], conditions = ['deleted_at IS NULL'];
+    if (query.filter === 'ARCHIVED') conditions.push('archived_at IS NOT NULL');
+    else conditions.push('archived_at IS NULL');
     if (req.actor.role !== 'ADMIN') conditions.push("status='APPROVED'");
     const visibility = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
     const counts = (await pool.query(`SELECT count(*)::int AS total,count(*) FILTER (WHERE status='PENDING')::int AS pending,count(*) FILTER (WHERE status='APPROVED' AND import_status='PENDING')::int AS approved,count(*) FILTER (WHERE import_status='IMPORTED')::int AS imported FROM submissions ${visibility}`)).rows[0];
@@ -128,7 +131,7 @@ export async function createApp() {
   app.get('/api/cases/:id', authenticated, async (req, res) => {
     const id = uuid.parse(req.params.id);
     const row = (await pool.query('SELECT * FROM submissions WHERE id=$1', [id])).rows[0];
-    if (!row || (req.actor.role !== 'ADMIN' && row.status !== 'APPROVED')) throw problem(404, '找不到此案件。');
+    if (!row || row.deleted_at || (req.actor.role !== 'ADMIN' && row.status !== 'APPROVED')) throw problem(404, '找不到此案件。');
     const events = (await pool.query('SELECT actor,action,note,created_at AS at FROM audit_events WHERE submission_id=$1 ORDER BY created_at,id', [id])).rows;
     res.json({ ...item(row), history: events });
   });
@@ -150,6 +153,27 @@ export async function createApp() {
         await db.query('UPDATE submissions SET status=$2,import_status=$3,reviewed_by=$4,reviewed_at=now(),review_note=$5,version=version+1 WHERE id=$1', [id, input.action === 'APPROVE' ? 'APPROVED' : 'REJECTED', input.action === 'APPROVE' ? 'PENDING' : 'NOT_READY', actor.username, input.note]);
       }
       await db.query('INSERT INTO audit_events(id,submission_id,user_id,actor,action,note) VALUES ($1,$2,$3,$4,$5,$6)', [randomUUID(), id, actor.id, actor.username, input.action, input.note]);
+    });
+    announce(); res.json({ ok: true });
+  });
+  app.post('/api/cases/:id/archive', authenticated, administrator, async (req, res) => {
+    const id = uuid.parse(req.params.id);
+    await transaction(async db => {
+      const row = (await db.query('SELECT * FROM submissions WHERE id=$1 FOR UPDATE', [id])).rows[0];
+      if (!row || row.deleted_at) throw problem(404, '找不到此案件。');
+      if (row.archived_at) throw problem(409, '此案件已封存。');
+      await db.query('UPDATE submissions SET archived_at=now(),archived_by=$2,version=version+1 WHERE id=$1', [id, req.actor.username]);
+      await db.query('INSERT INTO audit_events(id,submission_id,user_id,actor,action) VALUES ($1,$2,$3,$4,\'ARCHIVE\')', [randomUUID(), id, req.actor.id, req.actor.username]);
+    });
+    announce(); res.json({ ok: true });
+  });
+  app.post('/api/cases/:id/delete', authenticated, administrator, async (req, res) => {
+    const id = uuid.parse(req.params.id);
+    await transaction(async db => {
+      const row = (await db.query('SELECT * FROM submissions WHERE id=$1 FOR UPDATE', [id])).rows[0];
+      if (!row || row.deleted_at) throw problem(404, '找不到此案件。');
+      await db.query('UPDATE submissions SET deleted_at=now(),deleted_by=$2,version=version+1 WHERE id=$1', [id, req.actor.username]);
+      await db.query('INSERT INTO audit_events(id,submission_id,user_id,actor,action,note) VALUES ($1,$2,$3,$4,\'DELETE\',\'管理員執行軟刪除\')', [randomUUID(), id, req.actor.id, req.actor.username]);
     });
     announce(); res.json({ ok: true });
   });

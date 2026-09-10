@@ -3,7 +3,7 @@
   const $ = id => document.getElementById(id);
   const state = { token: '', actor: null, cases: [], filter: 'ALL', selected: null, busy: false, page: 1, total: 0, pageSize: 25, counts: {}, editingUser: null };
   let csrf = '', generation = 0, refreshSequence = 0, openwebuiUrl = '', live = null;
-  const labels = { PENDING: '待審核', APPROVED: '待匯入', REJECTED: '已退回', IMPORTED: '已匯入' };
+  const labels = { PENDING: '待審核', APPROVED: '待匯入', REJECTED: '已退回', IMPORTED: '已匯入', ARCHIVED: '已封存' };
   const actions = { SUBMIT: '提交資料', APPROVE: '通過審核', REJECT: '退回補正', IMPORT: '完成知識庫匯入' };
   const storage = { get(key) { try { return localStorage.getItem(key); } catch (_) { return null; } }, set(key, value) { try { localStorage.setItem(key, value); } catch (_) {} } };
   async function request(url, method = 'GET', body) {
@@ -24,6 +24,8 @@
     if (name === 'getUsers') return request('/api/users');
     if (name === 'saveUser') return request('/api/users', 'POST', { ...args[1], ...(state.editingUser ? { version: state.editingUser.version } : {}) });
     if (name === 'updateCase') { const { id, ...body } = args[1]; return request('/api/cases/' + encodeURIComponent(id) + '/decision', 'POST', body); }
+    if (name === 'archiveCase') return request('/api/cases/' + encodeURIComponent(args[1]) + '/archive', 'POST', {});
+    if (name === 'deleteCase') return request('/api/cases/' + encodeURIComponent(args[1]) + '/delete', 'POST', {});
     throw new Error('不支援的操作。');
   }
   function message(id, error) { $(id).textContent = error ? (error.message || String(error)).replace(/^Exception: /, '') : ''; }
@@ -56,7 +58,7 @@
     $('workspace-title').firstChild.textContent = staff ? '匯入工作台' : '提交案件';
     $('role-description').textContent = staff ? '處理已通過審核的資料，完成 OpenWebUI 知識庫匯入。' : '檢視資料，完成審核與入庫交接。';
     $('cases-nav').querySelector('span').textContent = staff ? '匯入工作台' : '提交案件';
-    document.querySelectorAll('[data-filter="PENDING"], [data-filter="REJECTED"]').forEach(node => { node.hidden = staff; });
+    document.querySelectorAll('[data-filter="PENDING"], [data-filter="REJECTED"], [data-filter="ARCHIVED"]').forEach(node => { node.hidden = staff; });
     connectLive();
     showView('cases');
   }
@@ -155,6 +157,7 @@
     $('folder-link').hidden = !$('folder-link').hasAttribute('href');
     $('review-form').hidden = state.actor.role !== 'ADMIN' || item.status !== 'PENDING';
     $('import-form').hidden = item.status !== 'APPROVED' || item.importStatus !== 'PENDING';
+    $('record-admin-actions').hidden = state.actor.role !== 'ADMIN'; $('archive').hidden = !!item.archivedAt;
     $('openwebui-link').hidden = !openwebuiUrl; if (openwebuiUrl) $('openwebui-link').href = openwebuiUrl;
     $('review-note').value = ''; $('import-confirm').checked = false; $('mark-imported').disabled = true; message('detail-status', '');
     $('history').replaceChildren(); item.history.forEach(entry => { const li = element('li'); li.append(element('strong', actions[entry.action] || entry.action), element('small', date(entry.at) + ' · ' + entry.actor)); if (entry.note) li.append(element('p', entry.note)); $('history').append(li); });
@@ -179,6 +182,17 @@
   $('approve').addEventListener('click', () => decide('APPROVE'));
   $('reject').addEventListener('click', () => decide('REJECT'));
   $('mark-imported').addEventListener('click', () => decide('IMPORT'));
+  async function recordAction(action) {
+    if (!state.selected || state.busy) return;
+    const text = action === 'archiveCase' ? '確定要封存這筆案件嗎？它會從主要清單移除，但仍可在「已封存」查看。' : '確定要刪除這筆案件嗎？系統會保留稽核紀錄，但案件會從一般清單移除。';
+    if (!window.confirm(text)) return;
+    state.busy = true; message('detail-status', '處理中…');
+    try { await rpc(action, state.token, state.selected.id); $('detail').close(); await refresh(); message('global-status', action === 'archiveCase' ? '案件已封存。' : '案件已刪除。'); }
+    catch (error) { message('detail-status', error); }
+    finally { state.busy = false; }
+  }
+  $('archive').addEventListener('click', () => recordAction('archiveCase'));
+  $('delete-record').addEventListener('click', () => recordAction('deleteCase'));
   async function loadUsers() {
     const token = state.token;
     const users = await rpc('getUsers', token); if (token !== state.token) return;
