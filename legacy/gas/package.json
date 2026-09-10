@@ -1,0 +1,14 @@
+{
+  "name": "corpo-knowledge-review-gas",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build:crypto": "node scripts/build-crypto.mjs",
+    "preview": "node scripts/preview.mjs",
+    "test": "node --test tests/*.test.mjs"
+  },
+  "devDependencies": {
+    "@noble/hashes": "1.8.0",
+    "esbuild": "0.28.2"
+  }
+}

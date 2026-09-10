@@ -1,0 +1,8 @@
+node_modules/
+preview/
+.cloud/
+backups/
+.clasp.json
+.env
+.env.*
+!.env.example

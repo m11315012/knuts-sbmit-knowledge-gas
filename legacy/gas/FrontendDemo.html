@@ -1,0 +1,80 @@
+<script>
+/** Frontend-only login. Accounts and records here are public demonstration data. */
+const FrontendDemo = (() => {
+  'use strict';
+  const users = [
+    { account: 'admin', password: 'admin123', name: '管理員', role: 'ADMIN', enabled: true },
+    { account: 'staff', password: 'staff123', name: '行政人員', role: 'STAFF', enabled: true }
+  ];
+  const sample = (id, name, identity, submittedAt, notes, status, importStatus) => ({
+    id, sourceId: 'demo-' + id, submittedAt, email: id + '@example.com', name, identity, folderUrl: '', notes,
+    status, importStatus, reviewedBy: status === 'PENDING' ? '' : 'admin', reviewedAt: status === 'PENDING' ? '' : submittedAt,
+    reviewNote: status === 'REJECTED' ? '請補充資料來源與授權說明後重新提交。' : '',
+    importedBy: importStatus === 'IMPORTED' ? 'staff' : '', importedAt: importStatus === 'IMPORTED' ? submittedAt : '', version: 1,
+    history: [{ at: submittedAt, actor: 'Google Form（示範）', action: 'SUBMIT', note: '' }]
+      .concat(status === 'PENDING' ? [] : [{ at: submittedAt, actor: 'admin', action: status === 'REJECTED' ? 'REJECT' : 'APPROVE', note: status === 'REJECTED' ? '請補充資料來源與授權說明後重新提交。' : '' }])
+      .concat(importStatus === 'IMPORTED' ? [{ at: submittedAt, actor: 'staff', action: 'IMPORT', note: '' }] : [])
+  });
+  const cases = [
+    sample('demo-0006', '陳老師', '老師', '2026-09-10T07:31:55.000Z', '本學期課程教材與教學補充資料。', 'PENDING', 'NOT_READY'),
+    sample('demo-0005', '林老師', '老師', '2026-09-10T06:15:00.000Z', '研究方法與文獻閱讀指引。', 'PENDING', 'NOT_READY'),
+    sample('demo-0004', '黃助理', '行政人員', '2026-09-09T08:40:00.000Z', '教務作業流程與常見問題。', 'APPROVED', 'PENDING'),
+    sample('demo-0003', '吳老師', '老師', '2026-09-09T02:20:00.000Z', '專題製作參考手冊。', 'APPROVED', 'IMPORTED'),
+    sample('demo-0002', '張助理', '行政人員', '2026-09-08T06:50:00.000Z', '校內設備借用說明。', 'APPROVED', 'IMPORTED'),
+    sample('demo-0001', '李老師', '老師', '2026-09-08T01:05:00.000Z', '教學參考資料彙整。', 'REJECTED', 'NOT_READY')
+  ];
+  const sessions = new Map();
+  const copy = value => JSON.parse(JSON.stringify(value));
+  const publicUser = user => ({ account: user.account, name: user.name, role: user.role, enabled: user.enabled });
+  function actor(token) {
+    const account = sessions.get(token), user = users.find(item => item.account === account && item.enabled);
+    if (!user) throw new Error('請重新登入。');
+    return user;
+  }
+  function admin(token) { const user = actor(token); if (user.role !== 'ADMIN') throw new Error('只有管理員可以執行此操作。'); return user; }
+  const api = {
+    login(account, password) {
+      const user = users.find(item => item.account === account && item.password === password && item.enabled);
+      if (!user) throw new Error('帳號或密碼不正確，或此帳號已停用。');
+      const token = 'demo-' + crypto.randomUUID(); sessions.set(token, user.account);
+      return { token, actor: publicUser(user) };
+    },
+    logout(token) { sessions.delete(token); return { ok: true }; },
+    getDashboard(token) {
+      const user = actor(token);
+      return copy({ actor: publicUser(user), cases: cases.filter(item => user.role === 'ADMIN' || item.status === 'APPROVED') });
+    },
+    updateCase(token, input) {
+      const user = actor(token), item = cases.find(value => value.id === input.id);
+      if (!item) throw new Error('找不到此案件。');
+      if (item.version !== input.version) throw new Error('案件已更新，請重新整理。');
+      const now = new Date().toISOString(), note = String(input.note || '').trim();
+      if (input.action === 'IMPORT') {
+        if (item.status !== 'APPROVED' || item.importStatus !== 'PENDING') throw new Error('案件尚未通過或已匯入。');
+        item.importStatus = 'IMPORTED'; item.importedBy = user.account; item.importedAt = now;
+      } else {
+        admin(token);
+        if (!['APPROVE', 'REJECT'].includes(input.action) || item.status !== 'PENDING') throw new Error('無法執行此審核操作。');
+        if (input.action === 'REJECT' && !note) throw new Error('退回時請填寫原因。');
+        item.status = input.action === 'APPROVE' ? 'APPROVED' : 'REJECTED';
+        item.importStatus = input.action === 'APPROVE' ? 'PENDING' : 'NOT_READY';
+        item.reviewedBy = user.account; item.reviewedAt = now; item.reviewNote = note;
+      }
+      item.version++; item.history.push({ at: now, actor: user.account, action: input.action, note });
+      return { ok: true };
+    },
+    getUsers(token) { admin(token); return users.map(publicUser); },
+    saveUser(token, input) {
+      const user = admin(token), account = String(input.account).trim();
+      if (!/^[A-Za-z0-9_.@-]{3,64}$/.test(account) || !input.name || !['ADMIN', 'STAFF'].includes(input.role) || typeof input.enabled !== 'boolean') throw new Error('請填寫有效的帳號、姓名與角色。');
+      if (account === user.account && (!input.enabled || input.role !== 'ADMIN')) throw new Error('不能停用或降級目前登入的管理員。');
+      const existing = users.find(value => value.account === account);
+      if ((!existing || input.password) && (!input.password || input.password.length < 12 || input.password.length > 128)) throw new Error('新密碼請使用 12～128 個字元。');
+      if (existing) Object.assign(existing, { name: input.name, role: input.role, enabled: input.enabled, password: input.password || existing.password });
+      else users.push({ account, name: input.name, password: input.password, role: input.role, enabled: input.enabled });
+      return { ok: true };
+    }
+  };
+  return { call(name, ...args) { if (!Object.hasOwn(api, name)) return Promise.reject(new Error('不支援的操作。')); try { return Promise.resolve(api[name](...args)); } catch (error) { return Promise.reject(error); } } };
+})();
+</script>

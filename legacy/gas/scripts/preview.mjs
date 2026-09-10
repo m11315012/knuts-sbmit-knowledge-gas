@@ -1,0 +1,11 @@
+import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { resolve } from 'node:path';
+let html = await readFile('Index.html', 'utf8');
+for (const name of ['Styles', 'Client']) html = html.replace(`<?!= include_('${name}'); ?>`, await readFile(`${name}.html`, 'utf8'));
+const demo = await readFile('FrontendDemo.html', 'utf8');
+html = html.replace('<script>\n(() => {', demo + '\n<script>\n(() => {');
+html = html.replace('輸入系統帳號與密碼，進入審核工作台。', '本機展示：管理員 admin / admin123；行政 staff / staff123。');
+html = html.replace('資訊有序・知識有據', '本機展示 · 不連接真實資料 · 重整後還原');
+await mkdir('preview', { recursive: true });
+await writeFile('preview/index.html', html, 'utf8');
+console.log(resolve('preview/index.html'));

@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="zh-Hant" data-theme="night">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="dark light">
+  <title>CORPO｜提交知識庫資料</title><link rel="stylesheet" href="/assets/styles.css"><script src="/assets/submit.js" defer></script>
+</head>
+<body>
+  <header class="topbar"><a class="brand" href="/"><span class="mark" aria-hidden="true">C<span>■</span></span><span>CORPO<span class="brand-sub">KNOWLEDGE CONTROL</span></span></a><div class="top-actions"><a class="header-link" href="/admin">管理工作台 ↗</a><button id="theme" class="theme-button" aria-label="切換日間模式">NIGHT ◐</button></div></header>
+  <main class="submission-layout">
+    <section class="submission-intro"><div class="eyebrow">KNOWLEDGE INTAKE / 01</div><h1>分享你的資料，<br><span class="outline-text">累積共同知識。</span></h1><p>填寫資料與上傳資料夾網址，<br>交由管理員審核後加入知識庫。</p><ol class="submission-steps"><li><span>01</span><div><strong>準備資料</strong><p>將檔案放入資料夾，確認審核人員可讀取。</p></div></li><li><span>02</span><div><strong>填寫並提交</strong><p>提供聯絡資料、網址與補充說明。</p></div></li><li><span>03</span><div><strong>審核與入庫</strong><p>管理員審核通過後，由行政人員匯入。</p></div></li></ol><div class="industrial-grid" aria-hidden="true"><span>+</span><div></div><span>+</span></div></section>
+    <section class="submission-card" aria-labelledby="form-title">
+      <div id="form-panel"><div class="form-heading"><div><span class="eyebrow">SUBMISSION FORM</span><h2 id="form-title">提交資料</h2></div><span class="muted">* 必填</span></div>
+      <form id="submission-form">
+        <div class="form-grid"><label for="name">提交者姓名 *<input id="name" name="name" autocomplete="name" maxlength="100" placeholder="請填寫姓名" required></label><label for="email">電子郵件地址 *<input id="email" name="email" type="email" autocomplete="email" maxlength="254" placeholder="name@example.com" required></label></div>
+        <label for="identity">身分 *<select id="identity" name="identity" required><option value="">請選擇身分</option><option>老師</option><option>行政人員</option><option>學生</option><option>其他</option></select></label>
+        <label for="folder-url">資料上傳資料夾 URL *<input id="folder-url" name="folderUrl" type="url" inputmode="url" maxlength="2048" pattern="https://.*" placeholder="https://drive.google.com/drive/folders/…" aria-describedby="folder-help" required></label><p id="folder-help" class="field-help">請填寫 HTTPS 資料夾網址，並提供管理員與行政人員讀取權限。</p>
+        <label for="notes">補充資訊 <span class="muted">／選填</span><textarea id="notes" name="notes" rows="4" maxlength="5000" placeholder="資料內容、來源、適用範圍或其他需注意的事項"></textarea></label><div class="character-count"><span id="notes-count">0</span> / 5000</div>
+        <div id="form-status" class="message" role="status"></div><button id="submit-button" class="primary wide" type="submit" disabled>準備表單中…</button><p class="form-footnote">提交時間由系統自動記錄。送出後資料將進入待審核清單。</p>
+      </form></div>
+      <div id="success-panel" hidden aria-live="polite"><div class="success-symbol" aria-hidden="true">✓</div><div class="eyebrow">SUBMISSION RECEIVED</div><h2 tabindex="-1" id="success-title">資料已送出</h2><p>你的資料已加入待審核清單。</p><dl class="receipt"><dt>案件編號</dt><dd id="receipt-id" class="mono"></dd><dt>提交時間</dt><dd id="receipt-date"></dd></dl><button id="copy-id" class="secondary wide">複製案件編號</button><div id="copy-status" class="message" role="status"></div><button id="another" class="primary wide">提交另一份資料 ↗</button></div>
+    </section>
+  </main><footer class="site-footer"><span>CORPO / KNOWLEDGE CONTROL</span><span>資訊有序・知識有據</span></footer>
+</body>
+</html>
