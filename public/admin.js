@@ -2,7 +2,7 @@
   'use strict';
   const $ = id => document.getElementById(id);
   const state = { token: '', actor: null, cases: [], filter: 'ALL', selected: null, busy: false, page: 1, total: 0, pageSize: 25, counts: {}, editingUser: null };
-  let csrf = '', generation = 0, refreshSequence = 0;
+  let csrf = '', generation = 0, refreshSequence = 0, openwebuiUrl = '', live = null;
   const labels = { PENDING: '待審核', APPROVED: '待匯入', REJECTED: '已退回', IMPORTED: '已匯入' };
   const actions = { SUBMIT: '提交資料', APPROVE: '通過審核', REJECT: '退回補正', IMPORT: '完成知識庫匯入' };
   const storage = { get(key) { try { return localStorage.getItem(key); } catch (_) { return null; } }, set(key, value) { try { localStorage.setItem(key, value); } catch (_) {} } };
@@ -17,7 +17,7 @@
     return result;
   }
   async function rpc(name, ...args) {
-    if (name === 'login') { const result = await request('/api/login', 'POST', { account: args[0], password: args[1] }); return { ...result, token: String(++generation) }; }
+    if (name === 'login') { const result = await request('/api/login', 'POST', { account: args[0], password: args[1] }); openwebuiUrl = result.openwebuiUrl || ''; return { ...result, token: String(++generation) }; }
     if (name === 'logout') { const result = await request('/api/logout', 'POST', {}); await request('/api/session'); return result; }
     if (name === 'getDashboard') return request('/api/cases?' + new URLSearchParams({ page: state.page, filter: state.filter, search: $('search').value.trim() }));
     if (name === 'getCase') return request('/api/cases/' + encodeURIComponent(args[1]));
@@ -28,6 +28,7 @@
   }
   function message(id, error) { $(id).textContent = error ? (error.message || String(error)).replace(/^Exception: /, '') : ''; }
   function resetSession(text) {
+    if (live) { live.close(); live = null; }
     state.token = ''; state.actor = null; state.cases = []; state.selected = null; state.filter = 'ALL'; state.page = 1;
     $('workspace').hidden = true; $('login').hidden = false; $('case-rows').replaceChildren(); $('user-rows').replaceChildren();
     $('user-form').reset(); $('detail').close(); $('detail-fields').replaceChildren(); $('history').replaceChildren(); $('search').value = '';
@@ -50,13 +51,18 @@
     $('actor-email').textContent = state.actor.account;
     $('actor-role').textContent = state.actor.role === 'ADMIN' ? '管理員' : '行政人員';
     $('users-nav').hidden = state.actor.role !== 'ADMIN';
-    $('role-description').textContent = state.actor.role === 'ADMIN' ? '檢視資料，完成審核與入庫交接。' : '檢視已通過資料，完成知識庫匯入後標記進度。';
-    document.querySelectorAll('[data-filter="PENDING"], [data-filter="REJECTED"]').forEach(node => { node.hidden = state.actor.role !== 'ADMIN'; });
+    const staff = state.actor.role === 'STAFF';
+    $('workspace-kicker').textContent = staff ? 'IMPORT DESK / 01' : 'REVIEW CONSOLE / 01';
+    $('workspace-title').firstChild.textContent = staff ? '匯入工作台' : '提交案件';
+    $('role-description').textContent = staff ? '處理已通過審核的資料，完成 OpenWebUI 知識庫匯入。' : '檢視資料，完成審核與入庫交接。';
+    $('cases-nav').querySelector('span').textContent = staff ? '匯入工作台' : '提交案件';
+    document.querySelectorAll('[data-filter="PENDING"], [data-filter="REJECTED"]').forEach(node => { node.hidden = staff; });
+    connectLive();
     showView('cases');
   }
   $('login-button').disabled = true;
   request('/api/session').then(async result => {
-    if (result.actor) { state.actor = result.actor; state.token = String(++generation); await refresh(); showWorkspace(); }
+    if (result.actor) { state.actor = result.actor; state.token = String(++generation); openwebuiUrl = result.openwebuiUrl || ''; await refresh(); showWorkspace(); }
     $('login-button').disabled = false;
   }).catch(error => { message('login-status', error); $('login-button').disabled = !csrf; });
   $('login-form').addEventListener('submit', async event => {
@@ -87,6 +93,14 @@
       state.counts = result.counts; state.total = result.total; state.page = result.page; state.pageSize = result.pageSize;
       renderCases(); message('global-status', '');
     } finally { $('refresh').disabled = false; }
+  }
+  function connectLive() {
+    if (live) live.close();
+    live = new EventSource('/api/events');
+    live.onopen = () => $('live-indicator').classList.remove('offline');
+    live.onerror = () => $('live-indicator').classList.add('offline');
+    live.addEventListener('cases_changed', () => { if (!state.busy) load(); });
+    live.addEventListener('users_changed', () => { if (state.actor?.role === 'ADMIN' && !$('users-view').hidden) loadUsers().catch(error => message('global-status', error)); });
   }
   $('refresh').addEventListener('click', () => refresh().catch(error => message('global-status', error)));
   function renderCases() {
@@ -141,6 +155,7 @@
     $('folder-link').hidden = !$('folder-link').hasAttribute('href');
     $('review-form').hidden = state.actor.role !== 'ADMIN' || item.status !== 'PENDING';
     $('import-form').hidden = item.status !== 'APPROVED' || item.importStatus !== 'PENDING';
+    $('openwebui-link').hidden = !openwebuiUrl; if (openwebuiUrl) $('openwebui-link').href = openwebuiUrl;
     $('review-note').value = ''; $('import-confirm').checked = false; $('mark-imported').disabled = true; message('detail-status', '');
     $('history').replaceChildren(); item.history.forEach(entry => { const li = element('li'); li.append(element('strong', actions[entry.action] || entry.action), element('small', date(entry.at) + ' · ' + entry.actor)); if (entry.note) li.append(element('p', entry.note)); $('history').append(li); });
     if (!$('detail').open) $('detail').showModal();

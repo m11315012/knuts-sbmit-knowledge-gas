@@ -30,6 +30,7 @@ services:
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
       TRUST_PROXY: ${TRUST_PROXY:-0}
       APP_ORIGIN: ${APP_ORIGIN:-http://localhost:3000}
+      OPENWEBUI_URL: ${OPENWEBUI_URL:-}
     ports:
       - "${BIND_ADDRESS:-127.0.0.1}:${APP_PORT:-3000}:3000"
     depends_on:

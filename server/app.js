@@ -16,6 +16,13 @@ const item = row => ({ id: row.id, name: row.name, email: row.email, identity: r
   reviewNote: row.review_note, importedBy: row.imported_by, importedAt: row.imported_at, version: row.version });
 const saveSession = req => new Promise((resolve, reject) => req.session.save(error => error ? reject(error) : resolve()));
 const rate = (windowMs, limit, message) => rateLimit({ windowMs, limit, standardHeaders: 'draft-8', legacyHeaders: false, message: { error: message } });
+const liveClients = new Set();
+function announce(type = 'cases_changed') {
+  const message = `event: ${type}\ndata: {}\n\n`;
+  for (const client of liveClients) {
+    try { client.write(message); } catch (_) { liveClients.delete(client); }
+  }
+}
 
 export async function createApp() {
   const secret = process.env.SESSION_SECRET;
@@ -44,7 +51,7 @@ export async function createApp() {
       if (user?.enabled && user.auth_version === req.session.user.authVersion && req.session.user.expiresAt > Date.now()) actor = publicUser(user);
       else delete req.session.user;
     }
-    await saveSession(req); res.json({ csrf: req.session.csrf, actor });
+    await saveSession(req); res.json({ csrf: req.session.csrf, actor, openwebuiUrl: process.env.OPENWEBUI_URL || '' });
   });
   app.use('/api', (req, res, next) => {
     if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next();
@@ -72,11 +79,17 @@ export async function createApp() {
     await new Promise((resolve, reject) => req.session.regenerate(error => error ? reject(error) : resolve()));
     req.session.user = { id: user.id, authVersion: user.auth_version, expiresAt: Date.now() + 8 * 3600000 };
     req.session.csrf = randomBytes(32).toString('hex'); await saveSession(req);
-    res.json({ actor: publicUser(user), csrf: req.session.csrf });
+    res.json({ actor: publicUser(user), csrf: req.session.csrf, openwebuiUrl: process.env.OPENWEBUI_URL || '' });
   });
   app.post('/api/logout', async (req, res) => {
     await new Promise((resolve, reject) => req.session.destroy(error => error ? reject(error) : resolve()));
     res.clearCookie('corpo.sid', { httpOnly: true, sameSite: 'strict', secure }); res.json({ ok: true });
+  });
+  app.get('/api/events', authenticated, (req, res) => {
+    res.status(200).set({ 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache, no-transform', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' });
+    res.flushHeaders(); res.write(': connected\n\n'); liveClients.add(res);
+    const heartbeat = setInterval(() => { try { res.write(': heartbeat\n\n'); } catch (_) { clearInterval(heartbeat); liveClients.delete(res); } }, 20000);
+    req.on('close', () => { clearInterval(heartbeat); liveClients.delete(res); });
   });
 
   app.post('/api/submissions', rate(60 * 60000, 20, '本時段提交次數已達上限，請稍後再試。'), async (req, res) => {
@@ -94,6 +107,7 @@ export async function createApp() {
       return { id: row.id, submittedAt: row.submitted_at, duplicate: false };
     });
     res.status(result.duplicate ? 200 : 201).json(result);
+    if (!result.duplicate) announce();
   });
   app.get('/api/cases', authenticated, async (req, res) => {
     const query = querySchema.parse(req.query), parameters = [], conditions = [];
@@ -137,7 +151,7 @@ export async function createApp() {
       }
       await db.query('INSERT INTO audit_events(id,submission_id,user_id,actor,action,note) VALUES ($1,$2,$3,$4,$5,$6)', [randomUUID(), id, actor.id, actor.username, input.action, input.note]);
     });
-    res.json({ ok: true });
+    announce(); res.json({ ok: true });
   });
   app.get('/api/users', authenticated, administrator, async (req, res) => { res.json((await pool.query('SELECT * FROM users ORDER BY username')).rows.map(publicUser)); });
   app.post('/api/users', authenticated, administrator, async (req, res) => {
@@ -158,12 +172,13 @@ export async function createApp() {
       await db.query('INSERT INTO audit_events(id,user_id,actor,action,details) VALUES ($1,$2,$3,$4,$5)', [randomUUID(),id,actor.username,old ? 'UPDATE_USER' : 'CREATE_USER',JSON.stringify({ role: input.role, enabled: input.enabled, passwordChanged: !!hashed })]);
       return { ok: true, sessionInvalidated: id === actor.id && changedAuth };
     });
-    res.json(result);
+    announce('users_changed'); res.json(result);
   });
   const publicDir = fileURLToPath(new URL('../public/', import.meta.url));
   app.use('/assets', express.static(publicDir, { index: false, dotfiles: 'deny', maxAge: 0 }));
   app.get('/', (req, res) => res.sendFile('submit.html', { root: publicDir }));
   app.get('/admin', (req, res) => res.sendFile('admin.html', { root: publicDir }));
+  app.get('/staff', (req, res) => res.sendFile('admin.html', { root: publicDir }));
   app.use((req, res) => res.status(404).json({ error: '找不到此頁面。' }));
   app.use((error, req, res, next) => {
     if (res.headersSent) return next(error);
