@@ -11,3 +11,27 @@
   @media(prefers-reduced-motion:no-preference){button,a{transition:background .15s,opacity .15s}.login-card{animation:arrive .4s ease-out}@keyframes arrive{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}}
   .heading-actions{display:flex;align-items:center;gap:18px}.live-indicator{font-size:.75rem;color:var(--muted);font-family:"Courier New",monospace;white-space:nowrap}.live-indicator i{display:inline-block;width:7px;height:7px;border-radius:50%;background:#61c174;margin-right:6px;box-shadow:0 0 0 3px color-mix(in srgb,#61c174 18%,transparent)}.live-indicator.offline i{background:#c77b7b;box-shadow:none}#openwebui-link{margin-bottom:12px}
   .badge{font-weight:600}.badge.pending{color:#d8a24b;border-color:#b17b2d;background:color-mix(in srgb,#b17b2d 12%,transparent)}.badge.approved{color:#72a9dc;border-color:#4779aa;background:color-mix(in srgb,#4779aa 12%,transparent)}.badge.rejected{color:#d98787;border-color:#a95757;background:color-mix(in srgb,#a95757 12%,transparent)}.badge.imported{color:#75c48b;border-color:#4e9861;background:color-mix(in srgb,#4e9861 14%,transparent)}.badge.archived{color:#aaa;border-color:#777;background:color-mix(in srgb,#777 14%,transparent)}.metrics>div{position:relative}.metrics>div:before{content:"";position:absolute;left:0;right:0;top:0;height:3px;background:var(--line)}.metrics>div:nth-child(2):before{background:#d8a24b}.metrics>div:nth-child(3):before{background:#72a9dc}.metrics>div:nth-child(4):before{background:#75c48b}.danger{display:inline-flex;justify-content:center;align-items:center;gap:12px;padding:12px 20px;min-height:46px;font-weight:600;font-size:.9375rem;border:1px solid #a95757;border-radius:0;background:transparent;color:#d98787}.danger:hover{background:color-mix(in srgb,#a95757 14%,transparent)}.record-admin-actions{border-top:1px solid var(--line);padding-top:22px}.record-admin-actions p{font-size:.8125rem}
+
+/* Shared branding and compact case selection controls. */
+.brand-logo{display:block;flex:0 0 40px;width:40px;height:40px;object-fit:contain;border:1px solid var(--line);border-radius:50%;background:#fff}
+.brand-title{display:block;line-height:1.15}
+.brand-title .brand-sub{letter-spacing:.04em}
+.bulk-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap;border:1px solid var(--line);background:var(--panel);padding:10px 14px;margin:-6px 0 20px}
+.bulk-actions span{margin-right:auto;font-size:.875rem;color:var(--muted);white-space:nowrap}
+.bulk-actions button{height:32px;min-height:32px;padding:0 10px;font-size:.75rem;line-height:1.25;white-space:nowrap;flex:0 0 auto}
+.bulk-actions .text-button{padding:0 4px}
+.select-col{width:44px;padding-left:12px!important;padding-right:4px!important}
+.select-all-label,.case-select{display:flex;align-items:center;justify-content:center;min-height:24px}
+.select-all-label input,.case-select input{width:17px;height:17px;accent-color:var(--ink)}
+@media(max-width:740px){.brand{gap:8px}
+.brand-logo{flex-basis:34px;width:34px;height:34px}
+.brand-title{font-size:1rem}
+.brand-title .brand-sub{font-size:.625rem;letter-spacing:0}
+.top-actions{gap:8px}
+.header-link{font-size:.75rem}
+.bulk-actions{align-items:center;gap:6px;padding:10px}
+.bulk-actions span{width:auto;flex:1}
+.bulk-actions button{flex:0 0 auto;padding:0 9px;font-size:.75rem}
+}
+
+@media(max-width:540px){.topbar{height:auto;min-height:92px;padding:14px 20px;flex-wrap:wrap;gap:12px}.top-actions{width:100%;justify-content:flex-end}.brand{min-width:0}.brand-title{min-width:0}.bulk-actions{gap:8px}.bulk-actions span{flex-basis:100%}}
